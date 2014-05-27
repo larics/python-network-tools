@@ -3,9 +3,8 @@ python-netwok-tools
 
 Tools for checking network performance between two machines, written in Python. Two types of tests are performed.
 
-  # Ping test: runs specified number of pings towards the target machine and reports the results
-
-  # File transfer test: copies an user-specified file from the ``./data`` folder to the target machine. 
+  1. Ping test: runs specified number of pings towards the target machine and reports the results
+  2. File transfer test: copies an user-specified file from the ``./data`` folder to the target machine. 
 
 
 
@@ -14,7 +13,7 @@ Usage
 
 Sample invocation:
 
-    $ ./network-test.py -a 161.53.68.182 -n 10 -f medfile.mp4 -l C-XI-16 -u larics -p laricsc11 
+    $ ./network-test.py -a 161.53.68.182 -n 10 -f medfile.mp4 -l C-XI-16 -u username -p password 
 
 The file specified with the -f option should be placed in the ``./data`` folder.
 
