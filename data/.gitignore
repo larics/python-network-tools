@@ -1,0 +1,3 @@
+# Ignore multimedia files used for testing transfer rates
+*.avi
+*.mp4

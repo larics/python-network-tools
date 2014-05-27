@@ -9,6 +9,8 @@ import platform
 import os
 import time
 
+import paramiko
+
 # For logging
 from datetime import datetime
 import csv
@@ -29,16 +31,25 @@ def ping_test(addr, n = 10):
         count_flag = '-n'
 
     try:
-        ping = subprocess.Popen(['ping', addr, '-n', str(n)],
+        ping = subprocess.Popen(['ping', addr, count_flag, str(n)],
                                 stdout=subprocess.PIPE,
                                 stderr=subprocess.PIPE)
         (out,err) = ping.communicate()
-        if out:
+        if out and ('win' in sys.platform):
             try:
+                # Windows-specific output parsing
                 minimum = int(re.findall(r'Minimum = (\d+)', out)[0])
                 maximum = int(re.findall(r'Maximum = (\d+)', out)[0])
                 average = int(re.findall(r'Average = (\d+)', out)[0])
                 lost = int(re.findall(r'Lost = (\d+)', out)[0])
+            except:
+                print('No data for one of minimum/maximum/average/lost')
+        elif out:
+            try:
+                # Linux-specific output parsing
+                summary = re.findall(r'rtt min/avg/max/mdev = (\S+)', out)[0]
+                (minimum, average, maximum, mdev) = (float(x) for x in summary.split('/'))
+                lost = int(re.findall(r'(\d+)% packet loss', out)[0])
             except:
                 print('No data for one of minimum/maximum/average/lost')
         else:
@@ -49,15 +60,49 @@ def ping_test(addr, n = 10):
 
     return(minimum, maximum, average, lost)
 
-def copy_test(addr, file_path):
+def copy_test(addr, file_path, target_path, username, password):
 
-    print('Transferring file {0} to address {1}.'.format(file_path, addr))
+    print('Transferring file {0} to {1}:{2}.'.format(file_path, addr, target_path))
     
-    # Initialize values
+    # Determine file size
     size = os.path.getsize(file_path) / (1000 * 1000) # File size, in MB
-    start_time = time.time()
-    time.sleep(1)
-    elapsed_time = time.time() - start_time
+    elapsed_time = float('Inf')
+
+    ### Set up the SFTP connection ###
+    
+    # Get known host keys
+    host_keys = {}
+    try:
+        host_keys = paramiko.util.load_host_keys(os.path.expanduser('~/.ssh/known_hosts'))
+    except IOError:
+        print('*** Unable to open host keys file!')
+    if host_keys.has_key(addr):
+        hostkeytype = host_keys[addr].keys()[0]
+        hostkey = host_keys[addr][hostkeytype]
+        print('Using host key of type {0}'.format(hostkeytype))
+
+    # Connect and use paramiko Transport to negotiate SSH2 accross the connection
+    port = 22
+    try:
+        print('Establishing SSH connection to: {0}:{1}'.format(addr, port))
+        t = paramiko.Transport((addr, port))
+        #t.start_client()
+        t.connect(username=username, password=password, hostkey=hostkey)
+        print('Connection established! Starting file transfer, please be patient...')
+        sftp = paramiko.SFTPClient.from_transport(t)
+
+        start_time = time.time()
+        sftp.put(file_path, target_path)
+        elapsed_time = time.time() - start_time
+
+    except Exception, e:
+        print('*** Caught exception {0}: {1}'.format(e.__class__, e))
+        try:
+            t.close()
+        except:
+            pass
+
+
     throughput = size * 8 / elapsed_time
 
     return (size, elapsed_time, throughput)
@@ -70,7 +115,11 @@ if __name__ == '__main__':
     parser.add_argument('--data_folder', help='Folder for keeping data.', default='./data')
     parser.add_argument('-f','--data_file', help='Data file name.', required=True)
     parser.add_argument('-l','--location', help='Test location.', required=True)
-    parser.add_argument('-t','--target_platform', help='Target platform.', required=True)
+    parser.add_argument('-u','--username', help='Remote machine username.', required=True)
+    parser.add_argument('-p','--password', help='Remote machine password.', required=True)
+    parser.add_argument('-d','--remote_dir', 
+                        help='Remote folder, relative to /home/username.', 
+                        default='Downloads')
     args = parser.parse_args()
 
     # Get time and platform info
@@ -82,13 +131,21 @@ if __name__ == '__main__':
     print('Minimum = {0}ms\nMaximum = {1}ms\nAverage = {2}ms\nLost = {3}%\n\n'.format(minimum,
                                                                            maximum,
                                                                            average,
-                                                                           lost / args.n * 100))
+                                                                           lost))
 
     # Run the file transfer test
     data_folder = args.data_folder
     if data_folder[-1] != '/': 
           data_folder = data_folder + '/'
-    (size, elapsed_time, throughput) = copy_test(args.address, data_folder + args.data_file)
+    remote_dir = args.remote_dir
+    if remote_dir[-1] != '/':
+        remote_dir += '/'
+    (size, elapsed_time, throughput) = copy_test(args.address, 
+                                                 data_folder + args.data_file,
+                                                 '/home/' + args.username + '/' + remote_dir + args.data_file,
+                                                 args.username,
+                                                 args.password)
+
     print('--- File transfer test results ---\n')
     print('File size = {0}MB'.format(size))
     print('Elapsed time = {0}s'.format(elapsed_time))
@@ -104,10 +161,12 @@ if __name__ == '__main__':
     with open(log_path, 'wb') as csvfile:
           logwriter = csv.writer(csvfile, delimiter=';')
           logwriter.writerow(['Location', args.location])
-          logwriter.writerow(['Platform', platform.platform()])
           logwriter.writerow(['Time', str(datetime.now())])
+          logwriter.writerow(['Platform', platform.platform()])
+          logwriter.writerow(['Network adapter', ''])
           logwriter.writerow(['Target', args.address])
-          logwriter.writerow(['Target platform', args.target_platform])
+          logwriter.writerow(['Target platform', ''])
+          logwriter.writerow(['Target network adapter', ''])
           logwriter.writerow(['--- Ping test ---', ''])
           logwriter.writerow(['Ping count', args.n])
           logwriter.writerow(['Ping minimum round-trip [ms]', minimum])
