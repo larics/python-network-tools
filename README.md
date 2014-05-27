@@ -3,9 +3,9 @@ python-netwok-tools
 
 Tools for checking network performance between two machines, written in Python. Two types of tests are performed.
 
-# Ping test: runs specified number of pings towards the target machine and reports the results
+  # Ping test: runs specified number of pings towards the target machine and reports the results
 
-# File transfer test: copies an user-specified file from the ``./data`` folder to the target machine. 
+  # File transfer test: copies an user-specified file from the ``./data`` folder to the target machine. 
 
 
 
@@ -28,7 +28,14 @@ To get help on the command-line parameters, type:
 
     $ ./network-test.py -h
 
-After running the tests, please
+After running the tests, please update the following fields in the .csv log file:
+
+  - Network adapter (detailed info can be obtained by running the commands ``sudo lspci | egrep -i "network|ethernet")
+  - Target platform (output of the ``uname -a`` command on the target machine)
+  - Target platform adapter
+
+
+Most modern machines have at least two network adapters (wired and wireless), so please make sure you specify the appropriate one.
 
 Dependencies
 ------------
